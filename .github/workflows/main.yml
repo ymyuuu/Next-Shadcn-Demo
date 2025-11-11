@@ -1,8 +1,8 @@
 name: Refresh Demo
 on:
   workflow_dispatch: {}                 # 手动触发
-  schedule:
-    - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
+  # schedule:
+  #   - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
   # push:
   #   paths:
   #     - ".github/workflows/main.yml"    # 此文件变动时触发
@@ -33,7 +33,7 @@ jobs:
           shopt -s dotglob nullglob
           for item in * .*; do
             case "$item" in
-              .|..|.git|.github|temp-app) continue ;;
+              .|..|.git|temp-app) continue ;;
               *) rm -rf "$item" ;;
             esac
           done
@@ -51,8 +51,16 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
-          # 确保只在 Demo 分支
-          git checkout -B Demo
+          
+          # 创建全新的孤立分支（没有历史记录）
+          git checkout --orphan Demo
+          
+          # 删除所有 git 追踪的文件
+          git rm -rf --cached . 2>/dev/null || true
+          
+          # 添加所有当前文件
           git add -A
-          git commit --allow-empty -m "$TIME"
+          
+          # 提交并强制推送
+          git commit -m "$TIME"
           git push --force origin Demo
