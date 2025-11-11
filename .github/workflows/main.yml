@@ -52,15 +52,42 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
           
-          # 创建全新的孤立分支（没有历史记录）
-          git checkout --orphan Demo
+          # 切换到 Demo 分支
+          git checkout Demo 2>/dev/null || git checkout --orphan Demo
           
-          # 删除所有 git 追踪的文件
-          git rm -rf --cached . 2>/dev/null || true
-          
-          # 添加所有当前文件
+          # 添加所有变更
           git add -A
           
+          # 检测变更类型并生成 commit message
+          if git diff --cached --quiet; then
+            # 没有变更
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          # 统计变更
+          ADDED=$(git diff --cached --name-status | grep "^A" | wc -l)
+          MODIFIED=$(git diff --cached --name-status | grep "^M" | wc -l)
+          DELETED=$(git diff --cached --name-status | grep "^D" | wc -l)
+          
+          # 根据主要变更类型生成 commit message
+          if [ "$ADDED" -gt 0 ] && [ "$MODIFIED" -eq 0 ] && [ "$DELETED" -eq 0 ]; then
+            MESSAGE="Add $TIME"
+          elif [ "$MODIFIED" -gt 0 ] && [ "$ADDED" -eq 0 ] && [ "$DELETED" -eq 0 ]; then
+            MESSAGE="Up $TIME"
+          elif [ "$DELETED" -gt 0 ] && [ "$ADDED" -eq 0 ] && [ "$MODIFIED" -eq 0 ]; then
+            MESSAGE="$TIME"  # 删除的不写备注，只有时间戳
+          else
+            # 混合变更，选择数量最多的类型
+            if [ "$ADDED" -ge "$MODIFIED" ] && [ "$ADDED" -ge "$DELETED" ]; then
+              MESSAGE="Add $TIME"
+            elif [ "$MODIFIED" -ge "$ADDED" ] && [ "$MODIFIED" -ge "$DELETED" ]; then
+              MESSAGE="Up $TIME"
+            else
+              MESSAGE="$TIME"
+            fi
+          fi
+          
           # 提交并强制推送
-          git commit -m "$TIME"
+          git commit -m "$MESSAGE"
           git push --force origin Demo
