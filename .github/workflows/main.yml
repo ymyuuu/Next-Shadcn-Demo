@@ -1,11 +1,11 @@
 name: Refresh Demo
 on:
   workflow_dispatch: {}                 # 手动触发
-  # schedule:
-  #   - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
-  # push:
-  #   paths:
-  #     - ".github/workflows/main.yml"    # 此文件变动时触发
+  schedule:
+    - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
+  push:
+    paths:
+      - ".github/workflows/main.yml"    # 此文件变动时触发
 permissions:
   contents: write
 jobs:
