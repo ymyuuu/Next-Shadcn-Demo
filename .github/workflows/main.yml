@@ -2,7 +2,7 @@ name: Refresh Demo
 on:
   workflow_dispatch: {}                 # 手动触发
   schedule:
-    - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
+    - cron: "0 20 * * *"               # 每天 04:00 北京时间(UTC+8) ≙ 前一日 20:00 UTC
   push:
     paths:
       - ".github/workflows/main.yml"    # 此文件变动时触发
