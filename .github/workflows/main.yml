@@ -1,0 +1,58 @@
+name: Refresh Demo
+on:
+  workflow_dispatch: {}                 # 手动触发
+  schedule:
+    - cron: "0 * * * *"                 # 每小时(UTC);北京时间 +8
+  # push:
+  #   paths:
+  #     - ".github/workflows/main.yml"    # 此文件变动时触发
+permissions:
+  contents: write
+jobs:
+  refresh-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@latest
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@latest
+        with:
+          node-version: 'latest'  # 使用最新版本
+      - name: Build project with shadcn
+        shell: bash
+        run: |
+          rm -rf temp-app
+          npx --yes create-next-app@latest temp-app \
+            --yes --ts --eslint --tailwind --app --src-dir --turbopack --import-alias "@/*"
+          npx --yes shadcn@canary init \
+            --cwd temp-app -t next -b slate --src-dir --css-variables -y
+          npx --yes shadcn@canary add \
+            --cwd temp-app --all -y -o
+          shopt -s dotglob nullglob
+          for item in * .*; do
+            case "$item" in
+              .|..|.git|.github|temp-app) continue ;;
+              *) rm -rf "$item" ;;
+            esac
+          done
+          cp -a temp-app/. .
+          rm -rf temp-app
+      - name: Install & Build
+        shell: bash
+        run: |
+          npm install
+          npm run build || true
+      - name: Commit & Force Push (Demo only)
+        shell: bash
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
+          # 确保只在 Demo 分支
+          git checkout -B Demo
+          git add -A
+          git commit --allow-empty -m "$TIME"
+          git push --force origin Demo
