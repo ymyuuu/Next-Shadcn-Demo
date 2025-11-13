@@ -223,14 +223,14 @@ export default function Page() {
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Toaster />
 
-      {/* 左侧输入和列表区 */}
-      <div className="flex w-96 flex-col border-r">
-        {/* 输入区 */}
-        <div className="border-b p-4">
-          <div className="space-y-3">
+      {/* 左侧：输入和列表 */}
+      <div className="flex w-80 flex-col border-r bg-background">
+        {/* 输入区域 */}
+        <div className="flex-none border-b p-3">
+          <div className="space-y-2">
             <Input
               placeholder="源站域名"
               value={sourceInput}
@@ -241,6 +241,7 @@ export default function Page() {
                   handleAddMapping();
                 }
               }}
+              className="h-9"
             />
             <Input
               placeholder="代理域名"
@@ -252,118 +253,131 @@ export default function Page() {
                   handleAddMapping();
                 }
               }}
+              className="h-9"
             />
-            <Button onClick={handleAddMapping} className="w-full">
-              添加映射
+            <Button onClick={handleAddMapping} className="h-9 w-full" size="sm">
+              添加
             </Button>
           </div>
         </div>
 
         {/* 映射列表 */}
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-hidden">
           {mappings.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">
+            <div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
               暂无映射
             </div>
           ) : (
-            <div className="p-2">
-              {mappings.map((mapping, index) => (
-                <div
-                  key={mapping.source}
-                  onClick={() => setSelectedIndex(index)}
-                  className={`mb-2 cursor-pointer rounded border p-3 hover:bg-accent ${
-                    selectedIndex === index ? "border-primary bg-accent" : ""
-                  }`}
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">#{index + 1}</span>
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveUp(index);
-                        }}
-                        disabled={index === 0}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveDown(index);
-                        }}
-                        disabled={index === mappings.length - 1}
-                      >
-                        ↓
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteMapping(index);
-                        }}
-                      >
-                        ×
-                      </Button>
+            <ScrollArea className="h-full">
+              <div className="space-y-1 p-2">
+                {mappings.map((mapping, index) => (
+                  <div
+                    key={mapping.source}
+                    onClick={() => setSelectedIndex(index)}
+                    className={`group relative cursor-pointer rounded-md border p-2 transition-colors hover:bg-accent ${
+                      selectedIndex === index ? "border-primary bg-accent" : "border-border"
+                    }`}
+                  >
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">#{index + 1}</span>
+                      <div className="flex gap-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMoveUp(index);
+                          }}
+                          disabled={index === 0}
+                          className="flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-background disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMoveDown(index);
+                          }}
+                          disabled={index === mappings.length - 1}
+                          className="flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-background disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMapping(index);
+                          }}
+                          className="flex h-5 w-5 items-center justify-center rounded text-xs hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="truncate text-xs font-medium">{mapping.source}</div>
+                      <div className="truncate text-xs text-muted-foreground">→ {mapping.proxy}</div>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">{mapping.source}</div>
-                    <div className="text-xs text-muted-foreground">→ {mapping.proxy}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
-        </ScrollArea>
+        </div>
       </div>
 
-      {/* 右侧预览区 */}
-      <div className="flex flex-1 flex-col">
-        {mappings.length > 0 && (
+      {/* 右侧：预览区域 */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {mappings.length > 0 ? (
           <>
-            <div className="border-b p-4">
-              <div className="flex items-center justify-between">
+            {/* 顶部工具栏 */}
+            <div className="flex-none border-b p-3">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant={selectedIndex !== null ? "default" : "outline"}
                     onClick={() => {
-                      if (mappings.length > 0) {
-                        setSelectedIndex(selectedIndex ?? 0);
+                      if (mappings.length > 0 && selectedIndex === null) {
+                        setSelectedIndex(0);
                       }
                     }}
+                    className="h-8 text-xs"
                   >
-                    当前映射
+                    当前
                   </Button>
                   <Button
                     size="sm"
                     variant={selectedIndex === null ? "default" : "outline"}
                     onClick={() => setSelectedIndex(null)}
+                    className="h-8 text-xs"
                   >
-                    全部映射
+                    全部
                   </Button>
                 </div>
-                <Button size="sm" onClick={handleCopyConfig}>
-                  复制配置
-                </Button>
+                <div className="flex items-center gap-2">
+                  {selectedIndex !== null && mappings[selectedIndex] && (
+                    <span className="text-xs text-muted-foreground">
+                      {mappings[selectedIndex].source} → {mappings[selectedIndex].proxy}
+                    </span>
+                  )}
+                  {selectedIndex === null && (
+                    <span className="text-xs text-muted-foreground">共 {mappings.length} 条映射</span>
+                  )}
+                  <Button size="sm" onClick={handleCopyConfig} className="h-8 text-xs">
+                    复制
+                  </Button>
+                </div>
               </div>
             </div>
-            <ScrollArea className="flex-1 p-4">
-              <pre className="text-xs">{getPreviewContent()}</pre>
-            </ScrollArea>
+
+            {/* 配置预览 */}
+            <div className="flex-1 overflow-hidden bg-muted/30">
+              <ScrollArea className="h-full">
+                <pre className="p-4 text-xs leading-relaxed">{getPreviewContent()}</pre>
+              </ScrollArea>
+            </div>
           </>
-        )}
-        {mappings.length === 0 && (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
             添加映射后将显示配置
           </div>
         )}
