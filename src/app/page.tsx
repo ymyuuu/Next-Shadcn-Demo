@@ -146,9 +146,12 @@ export default function Page() {
     addLine("对匹配到的所有内容执行替换而非仅第一次", "    sub_filter_once off;");
     addLine("仅对 HTML 类型的响应内容执行替换", "    sub_filter_types text/html;");
     addLine("将 Set-Cookie 中的源站域名改写为当前代理域名", `    proxy_cookie_domain ${source} $host;`);
+    
+    // 处理带 www 的域名，cookie_domain 应该使用主域名
+    const cookieDomain = source.startsWith('www.') ? source.substring(4) : source;
     addLine(
       "将 Set-Cookie 中带点前缀的源站域名改写为当前代理域名",
-      `    proxy_cookie_domain .${source} .$host;`
+      `    proxy_cookie_domain .${cookieDomain} .$host;`
     );
     addLine("保持 Cookie 路径为根路径", "    proxy_cookie_path / /;");
     addLine("隐藏后端返回的 Server 头信息", "    proxy_hide_header Server;");
