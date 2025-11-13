@@ -1,5 +1,3 @@
-// src/app/page.tsx
-
 "use client";
 
 // 导入 React 及其钩子函数
@@ -29,7 +27,7 @@ interface DomainMapping {
 }
 
 // 定义主页面组件
-export default function Page(): JSX.Element {
+export default function Page() {
   // 定义源站域名输入框的状态
   const [sourceInput, setSourceInput] = useState("");
   // 定义代理域名输入框的状态
