@@ -2,11 +2,8 @@
 
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Toaster, toast } from "sonner";
 
 interface DomainMapping {
@@ -19,7 +16,6 @@ export default function Page() {
   const [proxyInput, setProxyInput] = useState("");
   const [mappings, setMappings] = useState<DomainMapping[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [previewMode, setPreviewMode] = useState<"single" | "all">("single");
 
   const domainRegex =
     /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
@@ -53,14 +49,13 @@ export default function Page() {
     setSourceInput("");
     setProxyInput("");
     setSelectedIndex(mappings.length);
-    setPreviewMode("single");
     toast.success("已添加域名映射");
   };
 
   const handleDeleteMapping = (index: number) => {
     setMappings((prev) => prev.filter((_, i) => i !== index));
     if (selectedIndex === index) {
-      setSelectedIndex(null);
+      setSelectedIndex(mappings.length > 1 ? 0 : null);
     } else if (selectedIndex !== null && selectedIndex > index) {
       setSelectedIndex(selectedIndex - 1);
     }
@@ -194,262 +189,185 @@ export default function Page() {
     return lines.join("\n");
   };
 
-  const handleCopySingle = async (mapping: DomainMapping) => {
-    const config = generateConfigForMapping(mapping);
-    try {
-      await navigator.clipboard.writeText(config);
-      toast.success("已复制该映射的配置");
-    } catch (error) {
-      toast.error("复制失败，请检查浏览器权限");
-    }
-  };
-
-  const handleCopyAll = async () => {
+  const handleCopyConfig = async () => {
     if (mappings.length === 0) {
       toast.error("当前没有可复制的配置");
       return;
     }
-    const allConfig = mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
-    try {
-      await navigator.clipboard.writeText(allConfig);
-      toast.success("已复制全部配置");
-    } catch (error) {
-      toast.error("复制失败，请检查浏览器权限");
-    }
-  };
 
-  const handleCopyPreview = async () => {
-    if (previewMode === "single" && selectedIndex !== null) {
-      await handleCopySingle(mappings[selectedIndex]);
+    let config = "";
+    if (selectedIndex !== null && mappings[selectedIndex]) {
+      config = generateConfigForMapping(mappings[selectedIndex]);
     } else {
-      await handleCopyAll();
+      config = mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
+    }
+
+    try {
+      await navigator.clipboard.writeText(config);
+      toast.success("已复制配置");
+    } catch (error) {
+      toast.error("复制失败");
     }
   };
 
   const getPreviewContent = () => {
     if (mappings.length === 0) {
-      return "添加域名映射后，配置将在此处显示";
-    }
-
-    if (previewMode === "all") {
-      return mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
+      return "";
     }
 
     if (selectedIndex !== null && mappings[selectedIndex]) {
       return generateConfigForMapping(mappings[selectedIndex]);
     }
 
-    return "请从左侧选择一个映射查看配置";
+    return mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
   };
 
   return (
-    <main className="min-h-screen w-full bg-gradient-to-br from-slate-50 to-slate-100 px-4 py-6">
+    <div className="flex h-screen">
       <Toaster />
 
-      <div className="mx-auto max-w-7xl">
-        {/* 页面标题 */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">Nginx 多 Host Location 配置生成器</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            根据多个源站与代理域名映射，生成结构清晰、带注释的 Nginx location 配置。右侧可以实时预览每条映射生成的配置，并按需复制单条或全部配置内容。
-          </p>
+      {/* 左侧输入和列表区 */}
+      <div className="flex w-96 flex-col border-r">
+        {/* 输入区 */}
+        <div className="border-b p-4">
+          <div className="space-y-3">
+            <Input
+              placeholder="源站域名"
+              value={sourceInput}
+              onChange={(e) => setSourceInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddMapping();
+                }
+              }}
+            />
+            <Input
+              placeholder="代理域名"
+              value={proxyInput}
+              onChange={(e) => setProxyInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddMapping();
+                }
+              }}
+            />
+            <Button onClick={handleAddMapping} className="w-full">
+              添加映射
+            </Button>
+          </div>
         </div>
 
-        {/* 主内容区：左右分栏 */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* 左侧：输入和映射列表 */}
-          <div className="space-y-6">
-            {/* 输入表单 */}
-            <Card className="shadow-md">
-              <CardHeader>
-                <CardTitle className="text-lg">添加域名映射</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="source-domain">源站域名</Label>
-                    <Input
-                      id="source-domain"
-                      placeholder="例如：claude.ai"
-                      value={sourceInput}
-                      onChange={(e) => setSourceInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddMapping();
-                        }
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="proxy-domain">代理域名</Label>
-                    <Input
-                      id="proxy-domain"
-                      placeholder="例如：claude.hubp.de"
-                      value={proxyInput}
-                      onChange={(e) => setProxyInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddMapping();
-                        }
-                      }}
-                    />
-                  </div>
-
-                  <Button type="button" onClick={handleAddMapping} className="w-full">
-                    添加映射
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 映射列表 */}
-            <Card className="shadow-md">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <CardTitle className="text-lg">域名映射列表</CardTitle>
-                {mappings.length > 0 && (
-                  <Badge variant="secondary" className="text-xs">
-                    {mappings.length} 条映射
-                  </Badge>
-                )}
-              </CardHeader>
-              <CardContent>
-                {mappings.length === 0 ? (
-                  <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-slate-200 bg-slate-50">
-                    <p className="text-sm text-slate-500">暂无域名映射</p>
-                  </div>
-                ) : (
-                  <ScrollArea className="h-[400px] pr-4">
-                    <div className="space-y-2">
-                      {mappings.map((mapping, index) => (
-                        <div
-                          key={mapping.source}
-                          onClick={() => {
-                            setSelectedIndex(index);
-                            setPreviewMode("single");
-                          }}
-                          className={`group cursor-pointer rounded-lg border-2 p-3 transition-all hover:border-blue-300 hover:bg-blue-50/50 ${
-                            selectedIndex === index && previewMode === "single"
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-slate-200 bg-white"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  #{index + 1}
-                                </Badge>
-                                <span className="text-sm font-medium text-slate-900">{mapping.source}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-xs text-slate-500">
-                                <span>→</span>
-                                <span>{mapping.proxy}</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveUp(index);
-                                }}
-                                disabled={index === 0}
-                              >
-                                ↑
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveDown(index);
-                                }}
-                                disabled={index === mappings.length - 1}
-                              >
-                                ↓
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteMapping(index);
-                                }}
-                              >
-                                ×
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* 右侧：配置预览 */}
-          <div className="space-y-6">
-            <Card className="shadow-md lg:sticky lg:top-6">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-                <CardTitle className="text-lg">配置预览</CardTitle>
-                <div className="flex items-center gap-2">
-                  {mappings.length > 0 && (
-                    <>
+        {/* 映射列表 */}
+        <ScrollArea className="flex-1">
+          {mappings.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              暂无映射
+            </div>
+          ) : (
+            <div className="p-2">
+              {mappings.map((mapping, index) => (
+                <div
+                  key={mapping.source}
+                  onClick={() => setSelectedIndex(index)}
+                  className={`mb-2 cursor-pointer rounded border p-3 hover:bg-accent ${
+                    selectedIndex === index ? "border-primary bg-accent" : ""
+                  }`}
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">#{index + 1}</span>
+                    <div className="flex gap-1">
                       <Button
-                        type="button"
-                        size="sm"
-                        variant={previewMode === "single" ? "default" : "outline"}
-                        onClick={() => {
-                          setPreviewMode("single");
-                          if (selectedIndex === null && mappings.length > 0) {
-                            setSelectedIndex(0);
-                          }
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveUp(index);
+                        }}
+                        disabled={index === 0}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveDown(index);
+                        }}
+                        disabled={index === mappings.length - 1}
+                      >
+                        ↓
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMapping(index);
                         }}
                       >
-                        单个
+                        ×
                       </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={previewMode === "all" ? "default" : "outline"}
-                        onClick={() => setPreviewMode("all")}
-                      >
-                        全部
-                      </Button>
-                    </>
-                  )}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">{mapping.source}</div>
+                    <div className="text-xs text-muted-foreground">→ {mapping.proxy}</div>
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ScrollArea className="h-[500px] rounded-lg border bg-slate-900 p-4">
-                  <pre className="text-xs text-slate-100">
-                    {getPreviewContent()}
-                  </pre>
-                </ScrollArea>
-
-                {mappings.length > 0 && (
-                  <Button type="button" onClick={handleCopyPreview} className="w-full">
-                    {previewMode === "all" ? "复制全部配置" : "复制当前配置"}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
       </div>
-    </main>
+
+      {/* 右侧预览区 */}
+      <div className="flex flex-1 flex-col">
+        {mappings.length > 0 && (
+          <>
+            <div className="border-b p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={selectedIndex !== null ? "default" : "outline"}
+                    onClick={() => {
+                      if (mappings.length > 0) {
+                        setSelectedIndex(selectedIndex ?? 0);
+                      }
+                    }}
+                  >
+                    当前映射
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedIndex === null ? "default" : "outline"}
+                    onClick={() => setSelectedIndex(null)}
+                  >
+                    全部映射
+                  </Button>
+                </div>
+                <Button size="sm" onClick={handleCopyConfig}>
+                  复制配置
+                </Button>
+              </div>
+            </div>
+            <ScrollArea className="flex-1 p-4">
+              <pre className="text-xs">{getPreviewContent()}</pre>
+            </ScrollArea>
+          </>
+        )}
+        {mappings.length === 0 && (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            添加映射后将显示配置
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
