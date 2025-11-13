@@ -135,11 +135,14 @@ export default function Page() {
       "将上游返回的重定向地址中的源站域名改写为代理域名",
       `    proxy_redirect ~^https://${escapedSource}(.*)$ https://${proxy}$1;`
     );
-    addLine("在 HTML 内容中将源站域名替换为代理域名", `    sub_filter '${source}' '${proxy}';`);
-    addLine(
-      "在 HTML 内容中将以 // 开头的源站域名替换为代理域名",
-      `    sub_filter "//${source}" "//${proxy}";`
-    );
+    
+    // 添加所有映射的 sub_filter 规则
+    addLine("在 HTML 内容中替换所有域名映射关系");
+    mappings.forEach((m) => {
+      lines.push(`    sub_filter '${m.source}' '${m.proxy}';`);
+      lines.push(`    sub_filter "//${m.source}" "//${m.proxy}";`);
+    });
+    
     addLine("对匹配到的所有内容执行替换而非仅第一次", "    sub_filter_once off;");
     addLine("仅对 HTML 类型的响应内容执行替换", "    sub_filter_types text/html;");
     addLine("将 Set-Cookie 中的源站域名改写为当前代理域名", `    proxy_cookie_domain ${source} $host;`);
