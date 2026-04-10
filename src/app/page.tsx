@@ -393,9 +393,10 @@
 // }
 
 
+
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -413,33 +414,57 @@ export default function Page() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const domainRegex =
-    /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    /^(?=.{1,253}$)(?!-)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
+
+  const normalizeDomain = (domain: string): string => {
+    return domain.trim().toLowerCase().replace(/\.$/, "").replace(/^www\./, "");
+  };
+
+  const escapeDomainForRegex = (domain: string): string => {
+    return domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  };
+
+  const getRootCookieDomain = (domain: string): string => {
+    return normalizeDomain(domain);
+  };
 
   const handleAddMapping = () => {
-    const source = sourceInput.trim();
-    const proxy = proxyInput.trim();
+    const sourceRaw = sourceInput.trim().toLowerCase();
+    const proxyRaw = proxyInput.trim().toLowerCase();
 
-    if (!source || !proxy) {
+    if (!sourceRaw || !proxyRaw) {
       toast.error("请输入源站域名和代理域名");
       return;
     }
 
-    if (!domainRegex.test(source)) {
+    if (!domainRegex.test(sourceRaw)) {
       toast.error("源站域名格式不正确");
       return;
     }
 
-    if (!domainRegex.test(proxy)) {
+    if (!domainRegex.test(proxyRaw)) {
       toast.error("代理域名格式不正确");
       return;
     }
 
-    if (mappings.some((m) => m.source === source)) {
+    const normalizedSource = normalizeDomain(sourceRaw);
+    const normalizedProxy = normalizeDomain(proxyRaw);
+
+    if (mappings.some((m) => normalizeDomain(m.source) === normalizedSource)) {
       toast.error("该源站域名已存在");
       return;
     }
 
-    const newMapping: DomainMapping = { source, proxy };
+    if (normalizedSource === normalizedProxy) {
+      toast.error("源站域名和代理域名不能相同");
+      return;
+    }
+
+    const newMapping: DomainMapping = {
+      source: sourceRaw,
+      proxy: proxyRaw,
+    };
+
     setMappings((prev) => [...prev, newMapping]);
     setSourceInput("");
     setProxyInput("");
@@ -465,6 +490,7 @@ export default function Page() {
 
   const handleMoveUp = (index: number) => {
     if (index === 0) return;
+
     const next = [...mappings];
     [next[index - 1], next[index]] = [next[index], next[index - 1]];
     setMappings(next);
@@ -478,6 +504,7 @@ export default function Page() {
 
   const handleMoveDown = (index: number) => {
     if (index === mappings.length - 1) return;
+
     const next = [...mappings];
     [next[index], next[index + 1]] = [next[index + 1], next[index]];
     setMappings(next);
@@ -489,18 +516,13 @@ export default function Page() {
     }
   };
 
-  const escapeDomainForRegex = (domain: string): string => {
-    return domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  };
-
-  const getRootCookieDomain = (domain: string): string => {
-    return domain.startsWith("www.") ? domain.substring(4) : domain;
-  };
-
   const generateConfigForMapping = (mapping: DomainMapping): string => {
     const source = mapping.source;
     const proxy = mapping.proxy;
-    const escapedSource = escapeDomainForRegex(source);
+    const normalizedSource = normalizeDomain(source);
+    const escapedSource = escapeDomainForRegex(normalizedSource);
+    const cookieDomain = getRootCookieDomain(source);
+
     const lines: string[] = [];
 
     const addLine = (comment: string, line?: string) => {
@@ -540,7 +562,7 @@ export default function Page() {
     addLine("关闭上游证书校验（按需可改为开启）", "    proxy_ssl_verify off;");
     addLine(
       "将上游返回的重定向地址中的源站域名改写为代理域名",
-      `    proxy_redirect ~^https://${escapedSource}(.*)$ https://${proxy}$1;`
+      `    proxy_redirect ~^https://(www\\.)?${escapedSource}(.*)$ https://${proxy}$2;`
     );
 
     addLine("仅对指定文本类型启用 subs_filter 替换");
@@ -550,7 +572,8 @@ export default function Page() {
 
     addLine("使用 subs_filter 替换全部映射规则");
     mappings.forEach((m) => {
-      const escaped = escapeDomainForRegex(m.source);
+      const normalized = normalizeDomain(m.source);
+      const escaped = escapeDomainForRegex(normalized);
 
       lines.push(
         `    subs_filter '(https?://|//)(www\\.)?${escaped}' '$1${m.proxy}' gri;`
@@ -558,13 +581,10 @@ export default function Page() {
     });
 
     addLine("将 Set-Cookie 中的源站域名改写为当前代理域名", `    proxy_cookie_domain ${source} $host;`);
-
-    const cookieDomain = getRootCookieDomain(source);
     addLine(
       "将 Set-Cookie 中带点前缀的源站域名改写为当前代理域名",
       `    proxy_cookie_domain .${cookieDomain} .$host;`
     );
-
     addLine("保持 Cookie 路径为根路径", "    proxy_cookie_path / /;");
     addLine("隐藏后端返回的 Server 头信息", "    proxy_hide_header Server;");
     addLine("隐藏后端返回的 Content-Security-Policy 头", "    proxy_hide_header Content-Security-Policy;");
@@ -598,12 +618,10 @@ export default function Page() {
       return;
     }
 
-    let config = "";
-    if (selectedIndex !== null && mappings[selectedIndex]) {
-      config = generateConfigForMapping(mappings[selectedIndex]);
-    } else {
-      config = mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
-    }
+    const config =
+      selectedIndex !== null && mappings[selectedIndex]
+        ? generateConfigForMapping(mappings[selectedIndex])
+        : mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
 
     try {
       await navigator.clipboard.writeText(config);
@@ -613,7 +631,7 @@ export default function Page() {
     }
   };
 
-  const getPreviewContent = () => {
+  const previewContent = useMemo(() => {
     if (mappings.length === 0) {
       return "";
     }
@@ -623,7 +641,7 @@ export default function Page() {
     }
 
     return mappings.map((mapping) => generateConfigForMapping(mapping)).join("\n\n");
-  };
+  }, [mappings, selectedIndex]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -770,8 +788,8 @@ export default function Page() {
 
             <div className="flex-1 overflow-hidden bg-muted/30">
               <ScrollArea className="h-full">
-                <pre className="p-4 text-xs leading-relaxed whitespace-pre-wrap break-all">
-                  {getPreviewContent()}
+                <pre className="whitespace-pre-wrap break-all p-4 text-xs leading-relaxed">
+                  {previewContent}
                 </pre>
               </ScrollArea>
             </div>
