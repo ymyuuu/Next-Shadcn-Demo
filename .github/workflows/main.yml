@@ -12,7 +12,7 @@ permissions:
   contents: write                      # 允许推送代码
 
 concurrency:
-  group: refresh-demo                 # 防止重复运行
+  group: refresh-demo                  # 防止重复运行
   cancel-in-progress: true
 
 jobs:
@@ -23,20 +23,19 @@ jobs:
       - name: Checkout 仓库
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0              # 获取完整历史（后面要强推）
+          fetch-depth: 0               # 获取完整历史（后面要强推）
 
       - name: 设置 Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "lts/*"       # 使用 LTS，比 latest 稳
-          cache: "npm"               # 缓存依赖，加速 CI
+          node-version: "lts/*"        # 使用 LTS，比 latest 稳
 
       - name: 重新生成 Demo 项目
         shell: bash
         run: |
-          set -euo pipefail           # 严格模式，出错立即退出
+          set -euo pipefail            # 严格模式，出错立即退出
 
-          rm -rf temp-app             # 删除旧临时目录
+          rm -rf temp-app              # 删除旧临时目录
 
           # 创建最新 Next.js 项目
           npx --yes create-next-app@latest temp-app \
@@ -49,7 +48,7 @@ jobs:
             --turbopack \
             --import-alias "@/*"
 
-          # 初始化 shadcn（注意：没有 --src-dir 参数！）
+          # 初始化 shadcn（注意：没有 --src-dir 参数）
           npx --yes shadcn@latest init \
             --cwd temp-app \
             -t next \
@@ -78,17 +77,23 @@ jobs:
           rm -rf temp-app
 
       - name: 安装依赖
-        run: npm install
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install
 
       - name: 构建项目
-        run: npm run build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
 
       - name: 提交并强制推送 Demo 分支
         shell: bash
         run: |
           set -euo pipefail
 
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 生成时间（北京时间）
