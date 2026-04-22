@@ -1,35 +1,70 @@
 name: Refresh Demo
+
 on:
   workflow_dispatch: {}                 # 手动触发
   schedule:
     - cron: "0 20 * * *"               # 每天 04:00 北京时间(UTC+8) ≙ 前一日 20:00 UTC
   push:
     paths:
-      - ".github/workflows/main.yml"    # 此文件变动时触发
+      - ".github/workflows/main.yml"   # 此文件变动时触发
+
 permissions:
-  contents: write
+  contents: write                      # 允许推送代码
+
+concurrency:
+  group: refresh-demo                 # 防止重复运行
+  cancel-in-progress: true
+
 jobs:
   refresh-demo:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout 仓库
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0
-      - name: Setup Node.js
+          fetch-depth: 0              # 获取完整历史（后面要强推）
+
+      - name: 设置 Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 'latest'  # 使用最新版本
-      - name: Build project with shadcn
+          node-version: "lts/*"       # 使用 LTS，比 latest 稳
+          cache: "npm"               # 缓存依赖，加速 CI
+
+      - name: 重新生成 Demo 项目
         shell: bash
         run: |
-          rm -rf temp-app
+          set -euo pipefail           # 严格模式，出错立即退出
+
+          rm -rf temp-app             # 删除旧临时目录
+
+          # 创建最新 Next.js 项目
           npx --yes create-next-app@latest temp-app \
-            --yes --ts --eslint --tailwind --app --src-dir --turbopack --import-alias "@/*"
-          npx --yes shadcn@canary init \
-            --cwd temp-app -t next -b slate --src-dir --css-variables -y
-          npx --yes shadcn@canary add \
-            --cwd temp-app --all -y -o
+            --yes \
+            --ts \
+            --eslint \
+            --tailwind \
+            --app \
+            --src-dir \
+            --turbopack \
+            --import-alias "@/*"
+
+          # 初始化 shadcn（注意：没有 --src-dir 参数！）
+          npx --yes shadcn@latest init \
+            --cwd temp-app \
+            -t next \
+            -b radix \
+            --css-variables \
+            -y
+
+          # 安装全部组件
+          npx --yes shadcn@latest add \
+            --cwd temp-app \
+            --all \
+            -y \
+            -o
+
+          # 清空当前仓库（保留 .git）
           shopt -s dotglob nullglob
           for item in * .*; do
             case "$item" in
@@ -37,30 +72,43 @@ jobs:
               *) rm -rf "$item" ;;
             esac
           done
+
+          # 覆盖为新项目
           cp -a temp-app/. .
           rm -rf temp-app
-      - name: Install & Build
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 构建项目
+        run: npm run build
+
+      - name: 提交并强制推送 Demo 分支
         shell: bash
         run: |
-          npm install
-          npm run build || true
-      - name: Commit & Force Push (Demo only)
-        shell: bash
-        run: |
-          set -e
+          set -euo pipefail
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 生成时间（北京时间）
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
-          
-          # 创建全新的孤立分支（没有历史记录）
+
+          # 创建孤立分支（无历史）
           git checkout --orphan Demo
-          
-          # 删除所有 git 追踪的文件
+
+          # 清除 git 索引
           git rm -rf --cached . 2>/dev/null || true
-          
-          # 添加所有当前文件
+
+          # 添加所有文件
           git add -A
-          
-          # 提交并强制推送
+
+          # 如果没有变更就跳过
+          if git diff --cached --quiet; then
+            echo "没有变化，跳过提交"
+            exit 0
+          fi
+
+          # 提交并强推
           git commit -m "$TIME"
           git push --force origin Demo
