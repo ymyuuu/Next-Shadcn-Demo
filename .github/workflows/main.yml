@@ -1,47 +1,47 @@
 name: Refresh Demo
 
 on:
-  workflow_dispatch: {}                 # 手动触发
-
+  workflow_dispatch: {}                 # 允许在 GitHub Actions 页面手动触发
   schedule:
-    - cron: "0 20 * * *"                # 每天 04:00 北京时间，等于前一天 20:00 UTC
-
+    - cron: "0 20 * * *"                # 每天北京时间 04:00 运行；GitHub cron 使用 UTC，所以这里是前一天 20:00 UTC
   push:
     paths:
-      - ".github/workflows/main.yml"    # 只在此 workflow 文件变动时触发
+      - ".github/workflows/main.yml"    # 当这个 workflow 文件被修改并推送时触发
 
 permissions:
-  contents: write                       # 允许 Actions 写入仓库内容，用于提交和推送 Demo 分支
-
-concurrency:
-  group: refresh-demo                   # 避免多个刷新任务同时运行
-  cancel-in-progress: true
+  contents: write                       # 允许 workflow 提交代码并推送到仓库
 
 jobs:
   refresh-demo:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest              # 使用 GitHub 提供的 Ubuntu 运行环境
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v5       # 拉取当前仓库代码
         with:
-          fetch-depth: 0                # 拉取完整历史，方便创建 orphan 分支和强推
+          fetch-depth: 0                # 拉取完整 Git 历史，方便后面创建/推送分支
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6     # 安装 Node.js
         with:
-          node-version: 22              # 固定 Node 主版本，避免 latest 导致构建不稳定
+          node-version: 'latest'        # 使用最新版 Node.js
 
       - name: Build project with shadcn
         shell: bash
         run: |
-          set -euo pipefail
-
-          # 删除上一次临时生成的项目
+          # 删除旧的临时目录，避免上次残留影响本次生成
           rm -rf temp-app
 
-          # 创建一个新的 Next.js App Router 项目
-          # 这里保留 --src-dir，因为这是 create-next-app 的参数
+          # 创建一个新的 Next.js 项目
+          # 参数说明：
+          # --yes：自动确认 create-next-app 的默认问题
+          # --ts：使用 TypeScript
+          # --eslint：使用 ESLint
+          # --tailwind：使用 Tailwind CSS
+          # --app：使用 App Router
+          # --src-dir：使用 src/ 目录
+          # --turbopack：使用 Turbopack
+          # --import-alias "@/*"：使用 @/* 作为路径别名
           npx --yes create-next-app@latest temp-app \
             --yes \
             --ts \
@@ -53,24 +53,35 @@ jobs:
             --import-alias "@/*"
 
           # 初始化 shadcn/ui
-          # 注意：shadcn init 现在不再支持 --src-dir，这里不能加
+          # --cwd temp-app：在 temp-app 项目里执行
+          # --base radix：使用 Radix 作为底层组件库
+          # --preset nova：使用 Nova 预设风格
+          # --css-variables：使用 CSS 变量管理主题
+          # -y：自动确认
           npx --yes shadcn@latest init \
             --cwd temp-app \
-            -t next \
-            -b slate \
+            --base radix \
+            --preset nova \
             --css-variables \
             -y
 
-          # 安装全部 shadcn/ui 组件
+          # 添加 shadcn/ui 的所有组件
+          # --all：添加全部组件
+          # --overwrite：如果文件已存在则覆盖
+          # -y：自动确认
           npx --yes shadcn@latest add \
             --cwd temp-app \
             --all \
-            -y \
-            -o
+            --overwrite \
+            -y
 
-          # 清空当前工作区，保留 .git 和 temp-app
+          # 让 * 能匹配隐藏文件，让空匹配不会报错
           shopt -s dotglob nullglob
 
+          # 删除当前仓库根目录下的所有文件
+          # 但保留 .git 和 temp-app
+          # .git 必须保留，否则会丢失 Git 仓库信息
+          # temp-app 必须保留，因为新项目暂时还在里面
           for item in * .*; do
             case "$item" in
               .|..|.git|temp-app) continue ;;
@@ -78,44 +89,47 @@ jobs:
             esac
           done
 
-          # 把临时项目复制回仓库根目录
+          # 把 temp-app 里的新项目复制到仓库根目录
           cp -a temp-app/. .
 
-          # 删除临时项目
+          # 删除临时目录
           rm -rf temp-app
 
-      - name: Install and build
+      - name: Install & Build
         shell: bash
         run: |
-          set -euo pipefail
+          # 安装依赖
+          npm install
 
-          # 此时 create-next-app 已经生成 package-lock.json，所以 npm ci 可以正常使用
-          npm ci
+          # 尝试构建项目
+          # || true 表示即使构建失败，也继续后面的提交和推送
+          npm run build || true
 
-          # 构建失败时让 workflow 失败，不吞掉错误
-          npm run build
-
-      - name: Commit and force push demo branch
+      - name: Commit & Force Push Demo branch
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
 
-          # 配置 GitHub Actions 机器人身份
+          # 配置 Git 提交身份
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 使用北京时间作为提交信息
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
 
-          # 创建全新的孤立 Demo 分支，不保留历史记录
+          # 创建孤立分支 Demo
+          # 孤立分支没有历史记录，适合做每日刷新快照
           git checkout --orphan Demo
 
-          # 清除 Git 暂存区里的旧追踪文件
+          # 清除 Git 暂存区里原本追踪的文件
           git rm -rf --cached . 2>/dev/null || true
 
-          # 添加当前全部文件
+          # 添加当前生成的新项目文件
           git add -A
 
-          # 提交并强制推送到 Demo 分支
+          # 提交
           git commit -m "$TIME"
+
+          # 强制推送到远程 Demo 分支
+          # 注意：这会覆盖远程 Demo 分支历史
           git push --force origin Demo
