@@ -41,6 +41,7 @@ jobs:
           rm -rf temp-app
 
           # 创建一个新的 Next.js App Router 项目
+          # 这里保留 --src-dir，因为这是 create-next-app 的参数
           npx --yes create-next-app@latest temp-app \
             --yes \
             --ts \
@@ -52,11 +53,11 @@ jobs:
             --import-alias "@/*"
 
           # 初始化 shadcn/ui
+          # 注意：shadcn init 现在不再支持 --src-dir，这里不能加
           npx --yes shadcn@latest init \
             --cwd temp-app \
             -t next \
             -b slate \
-            --src-dir \
             --css-variables \
             -y
 
