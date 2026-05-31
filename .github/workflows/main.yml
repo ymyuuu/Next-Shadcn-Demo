@@ -31,7 +31,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22              # 固定 Node 主版本，避免 latest 导致构建不稳定
-          cache: npm
 
       - name: Build project with shadcn
         shell: bash
@@ -89,8 +88,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 优先使用 npm ci；如果没有 package-lock.json，则退回 npm install
-          npm ci || npm install
+          # 此时 create-next-app 已经生成 package-lock.json，所以 npm ci 可以正常使用
+          npm ci
 
           # 构建失败时让 workflow 失败，不吞掉错误
           npm run build
