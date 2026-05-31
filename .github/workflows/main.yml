@@ -2,17 +2,19 @@ name: Refresh Demo
 
 on:
   workflow_dispatch: {}                 # 手动触发
-  # schedule:
-  #   - cron: "0 20 * * *"               # 每天 04:00 北京时间(UTC+8) ≙ 前一日 20:00 UTC
-  # push:
-  #   paths:
-  #     - ".github/workflows/main.yml"   # 此文件变动时触发
+
+  schedule:
+    - cron: "0 20 * * *"                # 每天 04:00 北京时间，等于前一天 20:00 UTC
+
+  push:
+    paths:
+      - ".github/workflows/main.yml"    # 只在此 workflow 文件变动时触发
 
 permissions:
-  contents: write                      # 允许推送代码
+  contents: write                       # 允许 Actions 写入仓库内容，用于提交和推送 Demo 分支
 
 concurrency:
-  group: refresh-demo                  # 防止重复运行
+  group: refresh-demo                   # 避免多个刷新任务同时运行
   cancel-in-progress: true
 
 jobs:
@@ -20,24 +22,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout 仓库
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 0               # 获取完整历史（后面要强推）
+          fetch-depth: 0                # 拉取完整历史，方便创建 orphan 分支和强推
 
-      - name: 设置 Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "lts/*"        # 使用 LTS，比 latest 稳
+          node-version: 22              # 固定 Node 主版本，避免 latest 导致构建不稳定
+          cache: npm
 
-      - name: 重新生成 Demo 项目
+      - name: Build project with shadcn
         shell: bash
         run: |
-          set -euo pipefail            # 严格模式，出错立即退出
+          set -euo pipefail
 
-          rm -rf temp-app              # 删除旧临时目录
+          # 删除上一次临时生成的项目
+          rm -rf temp-app
 
-          # 创建最新 Next.js 项目
+          # 创建一个新的 Next.js App Router 项目
           npx --yes create-next-app@latest temp-app \
             --yes \
             --ts \
@@ -48,23 +52,25 @@ jobs:
             --turbopack \
             --import-alias "@/*"
 
-          # 初始化 shadcn（注意：没有 --src-dir 参数）
+          # 初始化 shadcn/ui
           npx --yes shadcn@latest init \
             --cwd temp-app \
             -t next \
-            -b radix \
+            -b slate \
+            --src-dir \
             --css-variables \
             -y
 
-          # 安装全部组件
+          # 安装全部 shadcn/ui 组件
           npx --yes shadcn@latest add \
             --cwd temp-app \
             --all \
             -y \
             -o
 
-          # 清空当前仓库（保留 .git）
+          # 清空当前工作区，保留 .git 和 temp-app
           shopt -s dotglob nullglob
+
           for item in * .*; do
             case "$item" in
               .|..|.git|temp-app) continue ;;
@@ -72,48 +78,44 @@ jobs:
             esac
           done
 
-          # 覆盖为新项目
+          # 把临时项目复制回仓库根目录
           cp -a temp-app/. .
+
+          # 删除临时项目
           rm -rf temp-app
 
-      - name: 安装依赖
+      - name: Install and build
         shell: bash
         run: |
           set -euo pipefail
-          npm install
 
-      - name: 构建项目
-        shell: bash
-        run: |
-          set -euo pipefail
+          # 优先使用 npm ci；如果没有 package-lock.json，则退回 npm install
+          npm ci || npm install
+
+          # 构建失败时让 workflow 失败，不吞掉错误
           npm run build
 
-      - name: 提交并强制推送 Demo 分支
+      - name: Commit and force push demo branch
         shell: bash
         run: |
           set -euo pipefail
 
+          # 配置 GitHub Actions 机器人身份
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 生成时间（北京时间）
+          # 使用北京时间作为提交信息
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
 
-          # 创建孤立分支（无历史）
+          # 创建全新的孤立 Demo 分支，不保留历史记录
           git checkout --orphan Demo
 
-          # 清除 git 索引
+          # 清除 Git 暂存区里的旧追踪文件
           git rm -rf --cached . 2>/dev/null || true
 
-          # 添加所有文件
+          # 添加当前全部文件
           git add -A
 
-          # 如果没有变更就跳过
-          if git diff --cached --quiet; then
-            echo "没有变化，跳过提交"
-            exit 0
-          fi
-
-          # 提交并强推
+          # 提交并强制推送到 Demo 分支
           git commit -m "$TIME"
           git push --force origin Demo
