@@ -2,8 +2,6 @@ name: Refresh Demo
 
 on:
   workflow_dispatch: {}                 # 允许在 GitHub Actions 页面手动触发
-  schedule:
-    - cron: "0 20 * * *"                # 每天北京时间 04:00 运行；GitHub cron 使用 UTC，所以这里是前一天 20:00 UTC
   push:
     paths:
       - ".github/workflows/main.yml"    # 当这个 workflow 文件被修改并推送时触发
@@ -13,35 +11,24 @@ permissions:
 
 jobs:
   refresh-demo:
-    runs-on: ubuntu-latest              # 使用 GitHub 提供的 Ubuntu 运行环境
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5       # 拉取当前仓库代码
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 0                # 拉取完整 Git 历史，方便后面创建/推送分支
+          fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6     # 安装 Node.js
+        uses: actions/setup-node@v6
         with:
-          node-version: 'latest'        # 使用最新版 Node.js
+          node-version: 'latest'
 
       - name: Build project with shadcn
         shell: bash
         run: |
-          # 删除旧的临时目录，避免上次残留影响本次生成
           rm -rf temp-app
 
-          # 创建一个新的 Next.js 项目
-          # 参数说明：
-          # --yes：自动确认 create-next-app 的默认问题
-          # --ts：使用 TypeScript
-          # --eslint：使用 ESLint
-          # --tailwind：使用 Tailwind CSS
-          # --app：使用 App Router
-          # --src-dir：使用 src/ 目录
-          # --turbopack：使用 Turbopack
-          # --import-alias "@/*"：使用 @/* 作为路径别名
           npx --yes create-next-app@latest temp-app \
             --yes \
             --ts \
@@ -52,12 +39,6 @@ jobs:
             --turbopack \
             --import-alias "@/*"
 
-          # 初始化 shadcn/ui
-          # --cwd temp-app：在 temp-app 项目里执行
-          # --base radix：使用 Radix 作为底层组件库
-          # --preset nova：使用 Nova 预设风格
-          # --css-variables：使用 CSS 变量管理主题
-          # -y：自动确认
           npx --yes shadcn@latest init \
             --cwd temp-app \
             --base radix \
@@ -65,23 +46,14 @@ jobs:
             --css-variables \
             -y
 
-          # 添加 shadcn/ui 的所有组件
-          # --all：添加全部组件
-          # --overwrite：如果文件已存在则覆盖
-          # -y：自动确认
           npx --yes shadcn@latest add \
             --cwd temp-app \
             --all \
             --overwrite \
             -y
 
-          # 让 * 能匹配隐藏文件，让空匹配不会报错
           shopt -s dotglob nullglob
 
-          # 删除当前仓库根目录下的所有文件
-          # 但保留 .git 和 temp-app
-          # .git 必须保留，否则会丢失 Git 仓库信息
-          # temp-app 必须保留，因为新项目暂时还在里面
           for item in * .*; do
             case "$item" in
               .|..|.git|temp-app) continue ;;
@@ -89,20 +61,13 @@ jobs:
             esac
           done
 
-          # 把 temp-app 里的新项目复制到仓库根目录
           cp -a temp-app/. .
-
-          # 删除临时目录
           rm -rf temp-app
 
       - name: Install & Build
         shell: bash
         run: |
-          # 安装依赖
           npm install
-
-          # 尝试构建项目
-          # || true 表示即使构建失败，也继续后面的提交和推送
           npm run build || true
 
       - name: Commit & Force Push Demo branch
@@ -110,26 +75,13 @@ jobs:
         run: |
           set -e
 
-          # 配置 Git 提交身份
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 使用北京时间作为提交信息
           TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
 
-          # 创建孤立分支 Demo
-          # 孤立分支没有历史记录，适合做每日刷新快照
           git checkout --orphan Demo
-
-          # 清除 Git 暂存区里原本追踪的文件
           git rm -rf --cached . 2>/dev/null || true
-
-          # 添加当前生成的新项目文件
           git add -A
-
-          # 提交
           git commit -m "$TIME"
-
-          # 强制推送到远程 Demo 分支
-          # 注意：这会覆盖远程 Demo 分支历史
           git push --force origin Demo
